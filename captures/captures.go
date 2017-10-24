@@ -59,7 +59,7 @@ func (c *Capture) Init(path_to_captures string, privacy string, bssid string, es
 
 	// Check if we have an Handshake
 	if privacy == "WPA" || privacy == "WPA2" {
-		c.checkForHandshake()
+		c.СheckForHandshake()
 	}
 
 	c.getIVs()
@@ -69,7 +69,7 @@ func (c *Capture) Init(path_to_captures string, privacy string, bssid string, es
 func (c *Capture) TryKeys(keys ...string) string {
 	if c.Target.Privacy == "WEP" || c.Target.Privacy == "OPN" {
 		// Only wpa
-		return nil
+		return ""
 	}
 
 	// build a temp dict
@@ -78,7 +78,7 @@ func (c *Capture) TryKeys(keys ...string) string {
 	file, err := os.Create(path)
 	if err != nil {
 		// Got an error, exit
-		return
+		return ""
 	}
 	defer file.Close()
 	defer os.Remove(path)
@@ -93,22 +93,22 @@ func (c *Capture) TryKeys(keys ...string) string {
 // Return ascii key; if cracking WEP dict can be null
 func (c *Capture) AttemptToCrack(dict string) string {
 	// Do not crack a second time!
-	if c.Key != nil {
+	if c.Key != "" {
 		return c.Key
 	}
 
 	// Start here
 	var key string
 
-	if (c.Target.Privacy == "WPA" || c.Target.Privacy == "WPA2") && dict != nil {
+	if (c.Target.Privacy == "WPA" || c.Target.Privacy == "WPA2") && dict != "" {
 		key = c.crackWPA(dict)
 	} else if c.Target.Privacy == "WEP" {
 		key = c.crackWEP()
 	} else {
-		key = nil
+		key = ""
 	}
 
-	if key != nil {
+	if key != "" {
 		c.Key = key
 	}
 
@@ -117,7 +117,7 @@ func (c *Capture) AttemptToCrack(dict string) string {
 
 func (c *Capture) crackWPA(dict string) string {
 	// I use a random file so you can run the func in parallel
-	path_to_key := os.TempDir() + "go-wifi_key" + strconv.Itoa(rand.Uint32())
+	path_to_key := os.TempDir() + "go-wifi_key" + strconv.Itoa(rand.Int())
 
 	// If the file exist, delete it
 	os.Remove(path_to_key)
@@ -131,7 +131,7 @@ func (c *Capture) crackWPA(dict string) string {
 	key_buf, err := ioutil.ReadFile(path_to_key)
 	if err != nil {
 		// no key found
-		return nil
+		return ""
 	}
 
 	return string(key_buf)
@@ -140,7 +140,7 @@ func (c *Capture) crackWPA(dict string) string {
 func (c *Capture) crackWEP() string {
 	// Start with PTW
 	// I use a random file so you can run the func in parallel
-	path_to_key := os.TempDir() + "go-wifi_key" + strconv.Itoa(rand.Uint32())
+	path_to_key := os.TempDir() + "go-wifi_key" + strconv.Itoa(rand.Int())
 
 	// If the file exist, delete it
 	os.Remove(path_to_key)
@@ -162,7 +162,7 @@ func (c *Capture) crackWEP() string {
 		key_buf, err = ioutil.ReadFile(path_to_key)
 		if err != nil {
 			// Korek and PTW failed, exit
-			return nil
+			return ""
 		}
 	}
 
@@ -170,7 +170,7 @@ func (c *Capture) crackWEP() string {
 	return string(key_buf)
 }
 
-func (c *Capture) checkForHandshake() {
+func (c *Capture) СheckForHandshake() {
 	// Thank you wifite (l. 2478, has_handshake_aircrack)
 	// build a temp dict
 	path := os.TempDir() + "go-wifi-fake-dict"
@@ -184,7 +184,7 @@ func (c *Capture) checkForHandshake() {
 
 	file.WriteString("that_is_a_fake_key_no_one_will_use")
 
-	cmd := exec.Command("aircrack-ng",  "-a", "2", "-w", path, "-b", "c.Target.Bssid", "c.pcap_file")
+	cmd := exec.Command("aircrack-ng", "-a", "2", "-w", path, "-b", c.Target.Bssid, c.pcap_file)
 
 	ouptut, err2 := cmd.Output()
 
@@ -202,5 +202,5 @@ func (c *Capture) checkForHandshake() {
 
 func (c *Capture) getIVs() {
 	// TODO: count ivs!
-	c.IVs = nil
+	c.IVs = 0
 }

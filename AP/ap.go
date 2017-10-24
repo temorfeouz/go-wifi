@@ -21,6 +21,8 @@
 package AP
 
 import (
+	"errors"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -28,8 +30,8 @@ import (
 
 	"os/exec"
 
-	"../attacks"
-	"../captures"
+	"github.com/temorfeouz/go-wifi/captures"
+	"github.com/temorfeouz/go-wifi/attacks"
 )
 
 // JSON exportable structs
@@ -52,18 +54,20 @@ type (
 		Essid   string `json:"essid"`
 		Key     string `json:"key"`
 		//Wps     bool   `json:"wps"`
+		IsSniff bool
 	}
 
 	// Client discovered
 	Client struct {
 		// MAC address
-		Station string `json:"station"`
-		First   string `json:"first seen at"`
-		Last    string `json:"last seen at"`
-		Power   int    `json:"power"`
-		Packets int    `json:"packets"`
-		Bssid   string `json:"bssid"`
-		Probed  string `json:"probed essids"`
+		Station  string `json:"station"`
+		First    string `json:"first seen at"`
+		Last     string `json:"last seen at"`
+		Power    int    `json:"power"`
+		Packets  int    `json:"packets"`
+		Bssid    string `json:"bssid"`
+		Probed   string `json:"probed essids"`
+		IsDeauth bool
 	}
 )
 
@@ -73,7 +77,7 @@ var captures_nb = 0
 
 // DEAUTH infinitely the AP using broadcast address
 func (a *AP) Deauth(iface string) (attacks.Attack, error) {
-	cmd := exec.Command("aireplay-ng", "-0", "0", "-a", a.Bssid, iface)
+	cmd := exec.Command("aireplay-ng", "--deauth", "0", "-a", a.Bssid, iface, "--ignore-negative-one")
 
 	err := cmd.Start() // Do not wait
 
@@ -131,23 +135,47 @@ func (a *AP) ArpReplay(iface string) (attacks.Attack, error) {
 	return cur_atk, err
 }
 
+var ErrAlreadySniff = errors.New("Already capture!")
+var ErrAlreadyDeauth = errors.New("Already deauth!")
+
 // Start a capture process
-func (a *AP) Capture(iface string) (attacks.Attack, captures.Capture, error) {
+func (a *AP) Capture(iface string) (*attacks.Attack, *captures.Capture, error) {
+
+	a.IsSniff = true
 	// Note: I do not use a TempDir since you may want to keep the pcaps
-	path := "go-wifi_capture-" + strconv.Itoa(captures_nb)
-	captures_nb += 1
+	basePath := "wifi_capture"
+	//exec.Command("rm", "-rf", basePath).Output()
 
 	// Make a specific dir so we do not mix captures
 	// TODO: change mode
-	err := os.Mkdir(path, 766)
-	if err == nil {
-		return nil, nil, err
+	if _, err := os.Stat(basePath); os.IsNotExist(err) {
+		err := os.Mkdir(basePath, 777)
+		if err != nil {
+			panic(err)
+			return nil, nil, err
+		}
 	}
 
-	path += "go-wifi"
-	cmd := exec.Command("airodump-ng", "--write", path, "-c", a.Channel, "--output-format", "pcap", "--bssid", a.Bssid, iface)
+	path := basePath + "/" + strings.TrimSpace(a.Essid)
+	if _, err := os.Stat(path); os.IsExist(err) {
+		err := os.Mkdir(path, 777)
+		if err != nil {
+			panic(err)
+			return nil, nil, err
+		}
+	} else {
 
-	err = cmd.Start() // Do not wait
+	}
+
+	params := []string{"-c", strconv.Itoa(a.Channel), "--bssid", a.Bssid, "-w", path + "/capture", iface, "--ignore-negative-one"}
+	// log.Println(strings.Join(params, " "))
+	cmd := exec.Command("airodump-ng", params...)
+
+	err := cmd.Start() // Do not wait
+	if err != nil {
+		log.Println(err)
+		return nil, nil, err
+	}
 
 	cur_atk := attacks.Attack{
 		Type:    "Capture",
@@ -156,7 +184,7 @@ func (a *AP) Capture(iface string) (attacks.Attack, captures.Capture, error) {
 		Started: time.Now().String(),
 	}
 
-	if err != nil {
+	if err == nil {
 		cur_atk.Running = true
 		cur_atk.Init(cmd.Process)
 	}
@@ -165,11 +193,15 @@ func (a *AP) Capture(iface string) (attacks.Attack, captures.Capture, error) {
 	cur_cap := captures.Capture{}
 	cur_cap.Init(path, a.Privacy, a.Bssid, a.Essid)
 
-	return cur_atk, cur_cap, err
+	return &cur_atk, &cur_cap, err
 }
 
 // DEAUTH infinitely the Client
 func (c *Client) Deauth(iface string) (attacks.Attack, error) {
+	if c.IsDeauth == true {
+		return attacks.Attack{}, ErrAlreadyDeauth
+	}
+	c.IsDeauth = true
 	cmd := exec.Command("aireplay-ng", "-0", "0", "-a", c.Station, "-d", c.Bssid, iface)
 
 	err := cmd.Start() // Do not wait

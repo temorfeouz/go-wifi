@@ -24,13 +24,14 @@ import (
 	"encoding/csv"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 
-	"../AP"
+	"github.com/temorfeouz/go-wifi/AP"
 )
 
 // WARNING in order to use airodump-ng, you may need root access
@@ -38,7 +39,7 @@ import (
 // JSON exportable structs
 // Full discovery
 type Discovery struct {
-	APs     []AP.AP     `json:"aps"`
+	APs     []*AP.AP    `json:"aps"`
 	Clients []AP.Client `json:"clients"`
 	Running bool        `json:"running"`
 	Started string      `json:"started at"`
@@ -59,6 +60,15 @@ func (d *Discovery) Stop() error {
 	return nil
 }
 
+func (d *Discovery) GetAP() *AP.AP {
+	for _, elem := range d.APs {
+		if elem.IsSniff == false && elem.Essid == "homeNet" {
+			return elem
+		}
+	}
+	return nil
+}
+
 // TODO: use a netxml parser
 
 // THE most important function: parse /tmp/discovery-01.csv and fill the structs
@@ -66,9 +76,21 @@ func (d *Discovery) Stop() error {
 // IDEA: parallelise the parsing with 2 goroutines
 func (d *Discovery) Parse() error {
 	// Dirty hack to have a clean dump
-	dump, err := ioutil.ReadFile(os.TempDir() + "/discovery-01.csv")
+	logFile := os.TempDir() + "/discovery-01.csv"
+	var _, err = os.Stat(logFile)
+
+	// create file if not exists
+	if os.IsNotExist(err) {
+		log.Printf("wait %s file...", logFile)
+		return nil
+	}
+	dump, err := ioutil.ReadFile(logFile)
 	if err != nil {
 		return err
+	}
+
+	if len(dump) == 0 {
+		return nil
 	}
 
 	dump_str := string(dump)
@@ -87,8 +109,8 @@ func (d *Discovery) Parse() error {
 	reader_clients := csv.NewReader(strings.NewReader(dump_clients))
 
 	// We will fill them back later
-	d.APs = nil
-	d.Clients = nil
+	//	d.APs = nil
+	//	d.Clients = nil
 
 	// Start with the aps
 	for {
@@ -104,32 +126,41 @@ func (d *Discovery) Parse() error {
 
 		// TODO: clean that
 		// NOTE: I am too lazy to check the errors
-		channel, _ := strconv.Atoi(record[3])
-		speed, _ := strconv.Atoi(record[4])
-		power, _ := strconv.Atoi(record[8])
-		beacons, _ := strconv.Atoi(record[9])
-		ivs, _ := strconv.Atoi(record[10])
-		idlen, _ := strconv.Atoi(record[12])
+		channel := strToInt(record[3])
+		speed := strToInt(record[4])
+		power := strToInt(record[8])
+		beacons := strToInt(record[9])
+		ivs := strToInt(record[10])
+		idlen := strToInt(record[12])
 
 		cur_ap := AP.AP{
-			Bssid:   record[0],
-			First:   record[1],
-			Last:    record[2],
+			Bssid:   strings.TrimSpace(record[0]),
+			First:   strings.TrimSpace(record[1]),
+			Last:    strings.TrimSpace(record[2]),
 			Channel: channel,
 			Speed:   speed,
-			Privacy: record[5],
-			Cipher:  record[6],
-			Auth:    record[7],
+			Privacy: strings.TrimSpace(record[5]),
+			Cipher:  strings.TrimSpace(record[6]),
+			Auth:    strings.TrimSpace(record[7]),
 			Power:   power,
 			Beacons: beacons,
 			IVs:     ivs,
-			Lan:     strings.Replace(record[11], " ", "", -1), // Clean blanks
+			Lan:     strings.TrimSpace(record[11]),
 			IdLen:   idlen,
-			Essid:   record[13],
-			Key:     record[14],
+			Essid:   strings.TrimSpace(record[13]),
+			Key:     strings.TrimSpace(record[14]),
 		}
 
-		d.APs = append(d.APs, cur_ap)
+		needAddAP := true
+		for _, ap := range d.APs {
+			if ap.Essid == cur_ap.Essid {
+				needAddAP = false
+				break
+			}
+		}
+		if needAddAP {
+			d.APs = append(d.APs, &cur_ap)
+		}
 	}
 
 	// Continue with the clients
@@ -150,19 +181,37 @@ func (d *Discovery) Parse() error {
 		packets, _ := strconv.Atoi(record[4])
 
 		cur_client := AP.Client{
-			Station: record[0],
-			First:   record[1],
-			Last:    record[2],
+			Station: strings.TrimSpace(record[0]),
+			First:   strings.TrimSpace(record[1]),
+			Last:    strings.TrimSpace(record[2]),
 			Power:   power,
 			Packets: packets,
-			Bssid:   record[5],
-			Probed:  record[6],
+			Bssid:   strings.TrimSpace(record[5]),
+			Probed:  strings.TrimSpace(record[6]),
 		}
 
-		d.Clients = append(d.Clients, cur_client)
+		isNeedAddClient := true
+		for _, client := range d.Clients {
+			if client.Bssid == cur_client.Bssid {
+				isNeedAddClient = false
+				break
+			}
+		}
+
+		if isNeedAddClient {
+			d.Clients = append(d.Clients, cur_client)
+		}
 	}
 
 	return nil
+}
+func strToInt(s string) int {
+	toReturn, err := strconv.Atoi(strings.TrimSpace(s))
+	if nil != err {
+		panic(err)
+	}
+
+	return toReturn
 }
 
 // Start a new discovery thanks to airodump-ng
@@ -171,11 +220,12 @@ func (d *Discovery) Parse() error {
 // it will be deleted!
 // Return a Discovery object
 func StartDiscovery(iface string) (Discovery, error) {
+	pathToOut := os.TempDir() + "/discovery"
 	// Delete previous log file
-	os.Remove(os.TempDir() + "/discovery-01.csv")
+	exec.Command("rm", "-rf", pathToOut+"*").Output()
 
 	// okay, enough cosmetics, time for real code!
-	cmd := exec.Command("airodump-ng", "--write", os.TempDir()+"/discovery", "--output-format", "csv", "--wps", iface)
+	cmd := exec.Command("airodump-ng", "--write", pathToOut, "--output-format", "csv", iface)
 
 	err := cmd.Start() // Do not wait
 
