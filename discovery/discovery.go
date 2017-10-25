@@ -39,11 +39,11 @@ import (
 // JSON exportable structs
 // Full discovery
 type Discovery struct {
-	APs     []*AP.AP    `json:"aps"`
-	Clients []AP.Client `json:"clients"`
-	Running bool        `json:"running"`
-	Started string      `json:"started at"`
-	Stopped string      `json:"stopped at"`
+	APs     []*AP.AP     `json:"aps"`
+	Clients []*AP.Client `json:"clients"`
+	Running bool         `json:"running"`
+	Started string       `json:"started at"`
+	Stopped string       `json:"stopped at"`
 	process *os.Process
 }
 
@@ -208,7 +208,7 @@ func (d *Discovery) Parse() error {
 		}
 
 		if isNeedAddClient {
-			d.Clients = append(d.Clients, cur_client)
+			d.Clients = append(d.Clients, &cur_client)
 		}
 	}
 
