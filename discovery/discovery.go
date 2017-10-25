@@ -47,6 +47,15 @@ type Discovery struct {
 	process *os.Process
 }
 
+func (d *Discovery) FindWifiMACByName(wifiName string) string {
+	for _, ap := range d.APs {
+		if ap.Essid == wifiName {
+			return ap.Bssid
+		}
+	}
+	return ""
+}
+
 // Stop the discovery...
 func (d *Discovery) Stop() error {
 	err := d.process.Kill()
