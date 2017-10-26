@@ -190,15 +190,14 @@ func (d *Discovery) Parse() error {
 		packets, _ := strconv.Atoi(record[4])
 
 		cur_client := AP.Client{
-			Station: strings.TrimSpace(record[0]),
+			Station: strings.TrimSpace(record[5]),
 			First:   strings.TrimSpace(record[1]),
 			Last:    strings.TrimSpace(record[2]),
 			Power:   power,
 			Packets: packets,
-			Bssid:   strings.TrimSpace(record[5]),
+			Bssid:   strings.TrimSpace(record[0]),
 			Probed:  strings.TrimSpace(record[6]),
 		}
-
 		isNeedAddClient := true
 		for _, client := range d.Clients {
 			if client.Bssid == cur_client.Bssid {
@@ -208,6 +207,7 @@ func (d *Discovery) Parse() error {
 		}
 
 		if isNeedAddClient {
+			// log.Printf("%+v", cur_client)
 			d.Clients = append(d.Clients, &cur_client)
 		}
 	}

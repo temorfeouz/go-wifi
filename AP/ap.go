@@ -30,8 +30,8 @@ import (
 
 	"os/exec"
 
-	"github.com/temorfeouz/go-wifi/captures"
 	"github.com/temorfeouz/go-wifi/attacks"
+	"github.com/temorfeouz/go-wifi/captures"
 )
 
 // JSON exportable structs
@@ -144,7 +144,7 @@ func (a *AP) Capture(iface string) (*attacks.Attack, *captures.Capture, error) {
 	a.IsSniff = true
 	// Note: I do not use a TempDir since you may want to keep the pcaps
 	basePath := "wifi_capture"
-	//exec.Command("rm", "-rf", basePath).Output()
+	// exec.Command("rm", "-rf", basePath).Output()
 
 	// Make a specific dir so we do not mix captures
 	// TODO: change mode
@@ -157,14 +157,13 @@ func (a *AP) Capture(iface string) (*attacks.Attack, *captures.Capture, error) {
 	}
 
 	path := basePath + "/" + strings.TrimSpace(a.Essid)
-	if _, err := os.Stat(path); os.IsExist(err) {
+	log.Printf("%+v", path)
+	if _, err := os.Stat(path); os.IsNotExist(err) {
 		err := os.Mkdir(path, 777)
 		if err != nil {
 			panic(err)
 			return nil, nil, err
 		}
-	} else {
-
 	}
 
 	params := []string{"-c", strconv.Itoa(a.Channel), "--bssid", a.Bssid, "-w", path + "/capture", iface, "--ignore-negative-one"}
