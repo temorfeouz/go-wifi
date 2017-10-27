@@ -71,7 +71,7 @@ func (d *Discovery) Stop() error {
 
 func (d *Discovery) GetAP() *AP.AP {
 	for _, elem := range d.APs {
-		if elem.IsSniff == false && elem.Essid == "homeNet" {
+		if elem.IsSniff == false {
 			return elem
 		}
 	}

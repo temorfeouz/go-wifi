@@ -157,7 +157,7 @@ func (a *AP) Capture(iface string) (*attacks.Attack, *captures.Capture, error) {
 	}
 
 	path := basePath + "/" + strings.TrimSpace(a.Essid)
-	log.Printf("%+v", path)
+	// log.Printf("%+v", path)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		err := os.Mkdir(path, 777)
 		if err != nil {

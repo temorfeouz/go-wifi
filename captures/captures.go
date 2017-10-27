@@ -21,6 +21,7 @@
 package captures
 
 import (
+	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -50,7 +51,7 @@ type (
 
 // Build the struct thanks to the dir (with .pcap and .csv) path
 func (c *Capture) Init(path_to_captures string, privacy string, bssid string, essid string) {
-	c.pcap_file = path_to_captures + "go-wifi-01.cap"
+	c.pcap_file = path_to_captures + "/*.cap"
 
 	// Fill the struct!
 	c.Target.Bssid = bssid
@@ -93,14 +94,14 @@ func (c *Capture) TryKeys(keys ...string) string {
 // Return ascii key; if cracking WEP dict can be null
 func (c *Capture) AttemptToCrack(dict string) string {
 	// Do not crack a second time!
-	if c.Key != "" {
-		return c.Key
-	}
+	// if c.Key != "" {
+	// 	return c.Key
+	// }
 
 	// Start here
 	var key string
 
-	if (c.Target.Privacy == "WPA" || c.Target.Privacy == "WPA2") && dict != "" {
+	if (strings.Contains(c.Target.Privacy, "WPA")) && dict != "" {
 		key = c.crackWPA(dict)
 	} else if c.Target.Privacy == "WEP" {
 		key = c.crackWEP()
@@ -116,19 +117,20 @@ func (c *Capture) AttemptToCrack(dict string) string {
 }
 
 func (c *Capture) crackWPA(dict string) string {
-	// I use a random file so you can run the func in parallel
-	path_to_key := os.TempDir() + "go-wifi_key" + strconv.Itoa(rand.Int())
+	pathToKey := os.TempDir() + "/go-wifi-key-" + c.Target.Essid
 
 	// If the file exist, delete it
-	os.Remove(path_to_key)
-
-	cmd := exec.Command("aircrack-ng", "-a", "2", "-l", path_to_key, "-w", dict, "-b", c.Target.Bssid, c.pcap_file)
+	os.Remove(pathToKey)
+	commandArgs := fmt.Sprintf(`aircrack-ng -a 2 -l %s -w %s -b %s %s`, pathToKey, dict, c.Target.Bssid, c.pcap_file)
+	cmd := exec.Command("sh", "-c", commandArgs)
+	// log.Println("sh", "-c", commandArgs)
+	// cmd := exec.Command("aircrack-ng", "-a", "2", "-l", path_to_key, "-w", dict, "-b", c.Target.Bssid, c.pcap_file)
 	cmd.Run()
 
 	// Wait termination so we can get the key
 	cmd.Wait()
 
-	key_buf, err := ioutil.ReadFile(path_to_key)
+	key_buf, err := ioutil.ReadFile(pathToKey)
 	if err != nil {
 		// no key found
 		return ""
@@ -173,7 +175,8 @@ func (c *Capture) crackWEP() string {
 func (c *Capture) СheckForHandshake() {
 	// Thank you wifite (l. 2478, has_handshake_aircrack)
 	// build a temp dict
-	path := os.TempDir() + "go-wifi-fake-dict"
+	path := os.TempDir() + "/go-wifi-fake-dict"
+	outputFile := os.TempDir() + "/tmpoutput" + c.Target.Essid
 
 	file, err := os.Create(path)
 	if err != nil {
@@ -184,20 +187,20 @@ func (c *Capture) СheckForHandshake() {
 
 	file.WriteString("that_is_a_fake_key_no_one_will_use")
 
-	cmd := exec.Command("aircrack-ng", "-a", "2", "-w", path, "-b", c.Target.Bssid, c.pcap_file)
+	commandArgs := fmt.Sprintf(` aircrack-ng -w %s -b %s %s > %s`, path, c.Target.Bssid, c.pcap_file, outputFile)
+	cmd := exec.Command("sh", "-c", commandArgs)
+	cmd.Output()
 
-	ouptut, err2 := cmd.Output()
+	// here read file and analuze it
+	output, err := ioutil.ReadFile(outputFile)
 
-	if err2 == nil {
-		if strings.Contains(string(ouptut), "Passphrase not in dictionary") {
-			c.Handshake = true
-		} else {
-			c.Handshake = false
-		}
+	if strings.Contains(string(output), "Passphrase not in dictionary") {
+		c.Handshake = true
+	} else {
+		c.Handshake = false
 	}
-
 	// Delete file
-	os.Remove(path)
+	// os.Remove(path)
 }
 
 func (c *Capture) getIVs() {
