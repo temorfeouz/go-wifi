@@ -123,7 +123,7 @@ func (c *Capture) crackWPA(dict string) string {
 	os.Remove(pathToKey)
 	commandArgs := fmt.Sprintf(`aircrack-ng -a 2 -l %s -w %s -b %s %s`, pathToKey, dict, c.Target.Bssid, c.pcap_file)
 	cmd := exec.Command("sh", "-c", commandArgs)
-	// log.Println("sh", "-c", commandArgs)
+	//log.Println("sh", "-c", commandArgs)
 	// cmd := exec.Command("aircrack-ng", "-a", "2", "-l", path_to_key, "-w", dict, "-b", c.Target.Bssid, c.pcap_file)
 	cmd.Run()
 
