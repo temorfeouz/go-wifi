@@ -201,7 +201,7 @@ func (c *Client) Deauth(iface string) (attacks.Attack, error) {
 		return attacks.Attack{}, ErrAlreadyDeauth
 	}
 	c.IsDeauth = true
-	cmd := exec.Command("aireplay-ng", "-0", "0", "-a", c.Station, "-d", c.Bssid, iface)
+	cmd := exec.Command("aireplay-ng", "-0", "0", "-a", c.Station, "-d", c.Bssid, iface, "--ignore-negative-one")
 
 	err := cmd.Start() // Do not wait
 
